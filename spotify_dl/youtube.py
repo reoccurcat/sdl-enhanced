@@ -36,7 +36,7 @@ def download_songs(songs, download_directory, format_string, skip_mp3,
     overwrites = not no_overwrites
     log.debug(f"Downloading to {download_directory}")
     for song in songs:
-        query = f"{song.get('artist')} - {song.get('name')} Lyrics".replace(":", "").replace("\"", "")
+        query = f"{song.get('artist')} - {song.get('name')}".replace(":", "").replace("\"", "")
         download_archive = path.join(download_directory, 'downloaded_songs.txt')
 
         file_name = file_name_f(song)

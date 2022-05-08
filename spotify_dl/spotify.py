@@ -3,16 +3,20 @@ import sys
 from spotify_dl.scaffold import log
 from spotify_dl.utils import sanitize
 from rich.progress import Progress
-def fetch_tracks(sp, item_type, url):
+
+songs_list = []
+
+def fetch_tracks(sp, item_type, url, downall):
     """
     Fetches tracks from the provided URL.
     :param sp: Spotify client
     :param item_type: Type of item being requested for: album/playlist/track
     :param url: URL of the item
+    :param downall: Whether full albums should be downloaded
     :return Dictionary of song and artist
     """
-    songs_list = []
     offset = 0
+    songtotal = 0
 
     if item_type == 'playlist':
         with Progress() as progress:
@@ -26,6 +30,7 @@ def fetch_tracks(sp, item_type, url):
                                             additional_types=['track'], offset=offset)
                 total_songs = items.get('total')
                 track_info_task = progress.add_task(description="Fetching track info", total=len(items['items']))
+                used = []
                 for item in items['items']:
                     track_info = item.get('track')
                     # If the user has a podcast in their playlist, there will be no track
@@ -34,32 +39,55 @@ def fetch_tracks(sp, item_type, url):
                         offset += 1
                         continue
                     track_album_info = track_info.get('album')
-                    track_num = track_info.get('track_number')
-                    spotify_id = track_info.get('id')
-                    track_name = track_info.get('name')
-                    track_artist = ", ".join([artist['name'] for artist in track_info.get('artists')])
-                    if track_album_info:
-                        track_album = track_album_info.get('name')
-                        track_year = track_album_info.get('release_date')[:4] if track_album_info.get('release_date') else ''
-                        album_total = track_album_info.get('total_tracks')
-                    if len(item['track']['album']['images']) > 0:
-                        cover = item['track']['album']['images'][0]['url']
-                    else:
-                        cover = None
+                    if downall is True:
+                        artists = track_info.get('artists')
+                        main_artist = artists[0].get('name', None) if len(artists) > 0 else None
+                        results = ""
+                        try:
+                            try:
+                                results = sp.search(q = 'album:"' + track_album_info['name'] + '" artist:"' + main_artist + '"', type = "album")
+                                album_id = results['albums']['items'][0]['uri']
+                                print('album:"' + track_album_info['name'] + '" artist:"' + main_artist + '"')
+                            except Exception:
+                                results = sp.search(q = 'album:"' + track_album_info['name'] + '"', type = "album")
+                                album_id = results['albums']['items'][0]['uri']
+                                print('album:"' + track_album_info['name'] + '"')
+                        except Exception:
+                            print(f'Skipped ' + track_album_info['name'])
+                        if album_id not in used:
+                            used.append(album_id)
+                            url2 = f'https://open.spotify.com/playlist/{album_id}'
+                            songnum = fetch_album(sp, url2)
+                            songtotal += songnum
+                            offset += 1
+                    else: 
+                        songtotal += total_songs
+                        track_num = track_info.get('track_number')
+                        spotify_id = track_info.get('id')
+                        track_name = track_info.get('name')
+                        track_artist = ", ".join([artist['name'] for artist in track_info.get('artists')])
+                        if track_album_info:
+                            track_album = track_album_info.get('name')
+                            track_year = track_album_info.get('release_date')[:4] if track_album_info.get('release_date') else ''
+                            album_total = track_album_info.get('total_tracks')
+                        if len(item['track']['album']['images']) > 0:
+                            cover = item['track']['album']['images'][0]['url']
+                        else:
+                            cover = None
 
-                    artists = track_info.get('artists')
-                    main_artist_id = artists[0].get('uri', None) if len(artists) > 0 else None
-                    genres = sp.artist(artist_id=main_artist_id).get('genres', []) if main_artist_id else []
-                    if len(genres) > 0:
-                        genre = genres[0]
-                    else:
-                        genre = ""
-                    songs_list.append({"name": track_name, "artist": track_artist, "album": track_album, "year": track_year,
-                                        "num_tracks": album_total, "num": track_num, "playlist_num": offset + 1,
-                                        "cover": cover, "genre": genre, "spotify_id": spotify_id})
-                    offset += 1
-                    progress.update(task_id=track_info_task, description=f"Fetching track info for \n{track_name}",advance=1)
-                progress.update(task_id=songs_task, description=f"Fetched {offset} of {total_songs} songs from the playlist", advance=100, total=total_songs)
+                        artists = track_info.get('artists')
+                        main_artist_id = artists[0].get('uri', None) if len(artists) > 0 else None
+                        genres = sp.artist(artist_id=main_artist_id).get('genres', []) if main_artist_id else []
+                        if len(genres) > 0:
+                            genre = genres[0]
+                        else:
+                            genre = ""
+                        songs_list.append({"name": track_name, "artist": track_artist, "album": track_album, "year": track_year,
+                                            "num_tracks": album_total, "num": track_num, "playlist_num": offset + 1,
+                                            "cover": cover, "genre": genre, "spotify_id": spotify_id})
+                        offset += 1
+                        progress.update(task_id=track_info_task, description=f"Fetching track info for \n{track_name}",advance=1)
+                progress.update(task_id=songs_task, description=f"Fetched {offset} of {songtotal} songs from the playlist", advance=100, total=total_songs)
                 if total_songs == offset:
                     break
 
@@ -168,3 +196,33 @@ def validate_spotify_url(url):
         log.info("Couldn't get a valid id")
         return False
     return True
+
+def fetch_album(sp, url):
+    offset = 0
+
+    while True:
+        album_info = sp.album(album_id=url)
+        items = sp.album_tracks(album_id=url, offset=offset)
+        total_songs = items.get('total')
+        track_album = album_info.get('name')
+        track_year = album_info.get('release_date')[:4] if album_info.get('release_date') else ''
+        album_total = album_info.get('total_tracks')
+        if len(album_info['images']) > 0:
+            cover = album_info['images'][0]['url']
+        else:
+            cover = None
+        if len(sp.artist(artist_id=album_info['artists'][0]['uri'])['genres']) > 0:
+            genre = sp.artist(artist_id=album_info['artists'][0]['uri'])['genres'][0]
+        else:
+            genre = ""          
+        for item in items['items']:
+            track_name = item.get('name')
+            track_artist = ", ".join([artist['name'] for artist in item['artists']])
+            track_num = item['track_number']
+            spotify_id = item.get('id')
+            songs_list.append({"name": track_name, "artist": track_artist, "album": track_album, "year": track_year,
+                            "num_tracks": album_total, "num": track_num, "playlist_num": offset + 1,
+                            "cover": cover, "genre": genre, "spotify_id": spotify_id})
+            offset += 1
+        if album_total == offset:
+            return total_songs

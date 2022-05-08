@@ -38,9 +38,11 @@ def spotify_dl():
                         help="Whether we should avoid overwriting the target audio file if it already exists",
                         default=False)
     parser.add_argument('-V', '--verbose', action='store_true',
-                        help='Show more information on what''s happening.')
+                        help='Show more information on what\'s happening.')
     parser.add_argument('-v', '--version', action='store_true',
                         help='Shows current version of the program')
+    parser.add_argument('-a', '--all', action='store_true',
+                        help='Download everything in the song\'s album as well')
     args = parser.parse_args()
 
     if args.version:
@@ -84,14 +86,15 @@ def spotify_dl():
             sys.exit(1)
         
         
-        
+        if args.all: downall = True
+        else: downall = False
         if args.output:
             item_type, item_id = parse_spotify_url(url)
             directory_name = get_item_name(sp, item_type, item_id)
             save_path = Path(PurePath.joinpath(Path(args.output), Path(directory_name)))
             save_path.mkdir(parents=True, exist_ok=True)
             console.print(f"Saving songs to [bold green]{directory_name}[/bold green] directory")
-            songs = fetch_tracks(sp, item_type, url)
+            songs = fetch_tracks(sp, item_type, url, downall)
         else:
             songs = {}
         if args.download is True:
