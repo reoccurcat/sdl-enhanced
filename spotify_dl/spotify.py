@@ -43,23 +43,30 @@ def fetch_tracks(sp, item_type, url, downall):
                         artists = track_info.get('artists')
                         main_artist = artists[0].get('name', None) if len(artists) > 0 else None
                         results = ""
+                        skipped = False
                         try:
                             try:
                                 results = sp.search(q = 'album:"' + track_album_info['name'] + '" artist:"' + main_artist + '"', type = "album")
                                 album_id = results['albums']['items'][0]['uri']
                                 print('album:"' + track_album_info['name'] + '" artist:"' + main_artist + '"')
+                                if album_id not in used:
+                                    used.append(album_id)
+                                    url2 = f'https://open.spotify.com/playlist/{album_id}'
+                                    songnum = fetch_album(sp, url2)
+                                    songtotal += songnum
+                                    offset += 1
                             except Exception:
                                 results = sp.search(q = 'album:"' + track_album_info['name'] + '"', type = "album")
                                 album_id = results['albums']['items'][0]['uri']
                                 print('album:"' + track_album_info['name'] + '"')
+                                if album_id not in used:
+                                    used.append(album_id)
+                                    url2 = f'https://open.spotify.com/playlist/{album_id}'
+                                    songnum = fetch_album(sp, url2)
+                                    songtotal += songnum
+                                    offset += 1
                         except Exception:
                             print(f'Skipped ' + track_album_info['name'])
-                        if album_id not in used:
-                            used.append(album_id)
-                            url2 = f'https://open.spotify.com/playlist/{album_id}'
-                            songnum = fetch_album(sp, url2)
-                            songtotal += songnum
-                            offset += 1
                     else: 
                         songtotal += total_songs
                         track_num = track_info.get('track_number')
